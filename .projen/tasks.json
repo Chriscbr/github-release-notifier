@@ -55,9 +55,6 @@
       "description": "Run tests",
       "steps": [
         {
-          "exec": "rm -fr lib/"
-        },
-        {
           "spawn": "test:compile"
         },
         {
@@ -76,10 +73,10 @@
           "exec": "npx projen"
         },
         {
-          "spawn": "test"
+          "spawn": "compile"
         },
         {
-          "spawn": "compile"
+          "spawn": "test"
         },
         {
           "spawn": "package"
@@ -147,7 +144,7 @@
           "exec": "yarn install --check-files"
         },
         {
-          "exec": "yarn upgrade @types/jest @types/node @typescript-eslint/eslint-plugin @typescript-eslint/parser eslint eslint-import-resolver-node eslint-import-resolver-typescript eslint-plugin-import jest jest-junit json-schema npm-check-updates standard-version ts-jest typescript"
+          "exec": "yarn upgrade @jest/globals @types/jest @types/node @typescript-eslint/eslint-plugin @typescript-eslint/parser eslint eslint-import-resolver-node eslint-import-resolver-typescript eslint-plugin-import jest jest-junit json-schema npm-check-updates standard-version ts-jest typescript @actions/core"
         },
         {
           "exec": "npx projen"

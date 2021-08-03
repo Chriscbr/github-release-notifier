@@ -1,13 +1,60 @@
-const { TypeScriptProject } = require('projen');
-const project = new TypeScriptProject({
-  defaultReleaseBranch: 'main',
-  name: 'release-reminders',
+const { TypeScriptProject, YamlFile } = require('projen');
+const { JobPermission } = require('projen/lib/github/workflows-model');
 
-  // deps: [],                          /* Runtime dependencies of this module. */
-  // description: undefined,            /* The description is just a string that helps people understand the purpose of the package. */
-  // devDeps: [],                       /* Build dependencies for this module. */
-  // packageName: undefined,            /* The "name" in package.json. */
-  // projectType: ProjectType.UNKNOWN,  /* Which type of project this is (library/app). */
-  // release: undefined,                /* Add release management to this project. */
+const ACTION_NAME = 'release-reminders';
+const ACTION_DESCRIPTION = 'Updates issues and pull requests when relevant code changes are published to GitHub releases.';
+
+const project = new TypeScriptProject({
+  name: ACTION_NAME,
+  description: ACTION_DESCRIPTION,
+  defaultReleaseBranch: 'main',
+
+  deps: ['@actions/core'],
+  devDeps: ['@jest/globals'],
+
+  compileBeforeTest: true,
 });
+
+project.package.addField('main', 'lib/main.js');
+
+const actionYaml = new YamlFile(project, 'action.yml', {
+  obj: {
+    name: ACTION_NAME,
+    description: ACTION_DESCRIPTION,
+    author: 'Amazon Web Services',
+    inputs: {
+      milliseconds: {
+        required: true,
+        description: 'input description here',
+        default: 'default value if applicable',
+      },
+    },
+    runs: {
+      using: 'node14',
+      main: 'dist/index.js',
+    },
+  },
+});
+
+project.buildWorkflow.addJobs({
+  integ: {
+    permissions: {
+      contents: JobPermission.READ,
+      issues: JobPermission.WRITE,
+    },
+    runsOn: 'ubuntu-latest',
+    steps: [
+      {
+        uses: 'actions/checkout@v2',
+      },
+      {
+        uses: './',
+        with: {
+          milliseconds: 1000,
+        },
+      },
+    ],
+  },
+});
+
 project.synth();

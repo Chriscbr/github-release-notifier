@@ -49,3 +49,13 @@ jobs:
           echo "The self-mutation commit has been marked as successful, and no further action should be necessary."
 
           exit 1
+  integ:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./
+        with:
+          milliseconds: 1000

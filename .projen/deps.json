@@ -22,6 +22,10 @@
       "type": "build"
     },
     {
+      "name": "@vercel/ncc",
+      "type": "build"
+    },
+    {
       "name": "eslint",
       "type": "build"
     },

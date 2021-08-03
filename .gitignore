@@ -11,9 +11,9 @@
 .nyc_output
 .yarn-integrity
 /coverage
-/dist
 /dist/changelog.md
 /dist/version.txt
+/lib
 /test-reports/
 build/Release
 coverage
@@ -42,7 +42,7 @@ yarn-error.log*
 !/.projenrc.js
 !/LICENSE
 !/action.yml
-!/lib
+!/dist
 !/package.json
 !/src
 !/test

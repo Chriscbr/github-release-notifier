@@ -17,6 +17,10 @@ const project = new TypeScriptProject({
 
 project.package.addField('main', 'lib/main.js');
 
+// include compiled JavaScript in version control so the action runner
+// can directly access it without needing to compile
+project.addGitIgnore('!/lib');
+
 const actionYaml = new YamlFile(project, 'action.yml', {
   obj: {
     name: ACTION_NAME,
@@ -31,7 +35,7 @@ const actionYaml = new YamlFile(project, 'action.yml', {
     },
     runs: {
       using: 'node12',
-      main: 'dist/index.js',
+      main: 'lib/main.js',
     },
   },
 });

@@ -10,16 +10,15 @@ const project = new TypeScriptProject({
   defaultReleaseBranch: 'main',
 
   deps: ['@actions/core'],
-  devDeps: ['@jest/globals'],
+  devDeps: ['@jest/globals', '@vercel/ncc'],
 
   compileBeforeTest: true,
 });
 
+// package as a single runnable .js file in /dist
+project.packageTask.reset('ncc build --source-map --license licenses.txt');
 project.package.addField('main', 'lib/main.js');
-
-// include compiled JavaScript in version control so the action runner
-// can directly access it without needing to compile
-project.addGitIgnore('!/lib');
+project.addGitIgnore('!/dist');
 
 const actionYaml = new YamlFile(project, 'action.yml', {
   obj: {
@@ -35,7 +34,7 @@ const actionYaml = new YamlFile(project, 'action.yml', {
     },
     runs: {
       using: 'node12',
-      main: 'lib/main.js',
+      main: 'dist/index.js',
     },
   },
 });

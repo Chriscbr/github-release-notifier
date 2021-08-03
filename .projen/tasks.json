@@ -144,7 +144,7 @@
           "exec": "yarn install --check-files"
         },
         {
-          "exec": "yarn upgrade @jest/globals @types/jest @types/node @typescript-eslint/eslint-plugin @typescript-eslint/parser eslint eslint-import-resolver-node eslint-import-resolver-typescript eslint-plugin-import jest jest-junit json-schema npm-check-updates standard-version ts-jest typescript @actions/core"
+          "exec": "yarn upgrade @jest/globals @types/jest @types/node @typescript-eslint/eslint-plugin @typescript-eslint/parser @vercel/ncc eslint eslint-import-resolver-node eslint-import-resolver-typescript eslint-plugin-import jest jest-junit json-schema npm-check-updates standard-version ts-jest typescript @actions/core"
         },
         {
           "exec": "npx projen"
@@ -194,13 +194,7 @@
       "description": "Create an npm tarball",
       "steps": [
         {
-          "exec": "mkdir -p dist/js"
-        },
-        {
-          "exec": "yarn pack"
-        },
-        {
-          "exec": "mv *.tgz dist/js/"
+          "exec": "ncc build --source-map --license licenses.txt"
         }
       ]
     },

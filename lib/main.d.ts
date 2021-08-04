@@ -1,5 +1,4 @@
 import * as github from '@actions/github';
-import { OctokitResponse } from '@octokit/types';
 import { GithubPullRequest, GithubRelease } from './types';
 export declare enum ActionMode {
     /**
@@ -34,8 +33,8 @@ export declare class GithubClient {
     private readonly owner;
     private readonly repo;
     constructor(octokit: HydratedOctokit, owner: string, repo: string);
-    getLatestRelease(): Promise<OctokitResponse<GithubRelease, number>>;
-    getPullRequests(commitSha: string): Promise<OctokitResponse<GithubPullRequest, number>>;
+    getLatestRelease(): Promise<GithubRelease>;
+    getPullRequestsFromCommit(commitSha: string): Promise<GithubPullRequest>;
 }
 export declare class GitClient {
     private readonly workspace;

@@ -1,7 +1,6 @@
 import * as cp from 'child_process';
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { OctokitResponse } from '@octokit/types';
 import { GithubPullRequest, GithubRelease } from './types';
 
 export enum ActionMode {
@@ -69,26 +68,19 @@ export class GithubClient {
     this.repo = repo;
   }
 
-  async getLatestRelease(): Promise<OctokitResponse<GithubRelease, number>> {
-    return this.octokit.request(`GET /repos/${this.owner}/${this.repo}/releases/latest`);
-    // return this.octokit.rest.repos.getLatestRelease({
-    //   owner: this.owner,
-    //   repo: this.repo,
-    // });
+  async getLatestRelease(): Promise<GithubRelease> {
+    const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/releases/latest`);
+    core.debug(`getLatestRelease: ${JSON.stringify(response)}`);
+
+    return response.data;
   }
 
-  async getPullRequests(commitSha: string): Promise<OctokitResponse<GithubPullRequest, number>> {
-    return this.octokit.request(`GET /repos/${this.owner}/${this.repo}/commits/${commitSha}/pulls`);
-  }
+  async getPullRequestsFromCommit(commitSha: string): Promise<GithubPullRequest> {
+    const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/commits/${commitSha}/pulls`);
+    core.debug(`getPullRequestsFromCommit: ${JSON.stringify(response)}`);
 
-  // getTag(tag: string) {
-  //   // return this.octokit.request(`GET /repos/${this.owner}/${this.repo}/git/refs/tags/${tag}`);
-  //   return this.octokit.rest.git.getRef({
-  //     owner: this.owner,
-  //     repo: this.repo,
-  //     ref: `refs/tags/${tag}`,
-  //   });
-  // }
+    return response.data;
+  }
 }
 
 export class GitClient {
@@ -123,19 +115,24 @@ export class GitClient {
 
 async function getPullRequests(gitClient: GitClient, githubClient: GithubClient, release: GithubRelease): Promise<GithubPullRequest[]> {
   const tag = release.tag_name;
-  const previousTag = gitClient.getPreviousTag(tag);
-  const commits = gitClient.getCommitsBetweenTags(previousTag, tag);
-  console.error(commits);
+  core.debug(`tag: ${tag}`);
 
-  const promises = commits.map((commitSha) => githubClient.getPullRequests(commitSha));
-  const pullRequestsResults = (await Promise.allSettled(promises)).flat();
+  const previousTag = gitClient.getPreviousTag(tag);
+  core.debug(`previousTag: ${previousTag}`);
+
+  const commits = gitClient.getCommitsBetweenTags(previousTag, tag);
+  core.debug(`commits: ${commits}`);
+
+  const promises = commits.map((commitSha) => githubClient.getPullRequestsFromCommit(commitSha));
+  const promiseResults = (await Promise.allSettled(promises)).flat();
   const pullRequests = [];
-  for (const result of pullRequestsResults) {
+  for (const result of promiseResults) {
     if (result.status === 'fulfilled') {
-      pullRequests.push(result.value.data);
+      pullRequests.push(result.value);
     }
   }
-  console.error(pullRequests);
+  core.debug(`pullRequests: ${pullRequests.map(pr => pr.url)}`);
+
   return pullRequests;
 }
 
@@ -164,10 +161,8 @@ async function run(): Promise<void> {
     const githubClient = new GithubClient(octokit, owner, repo);
     const gitClient = new GitClient();
 
-    const { data: latestRelease } = await githubClient.getLatestRelease();
-    core.debug(`latest release: ${JSON.stringify(latestRelease)}`);
+    const latestRelease = await githubClient.getLatestRelease();
     const pullRequests = await getPullRequests(gitClient, githubClient, latestRelease);
-    core.debug('pull requests:' + pullRequests.map((pr) => pr.title).join('\n'));
 
     getLinkedIssues(pullRequests); // TODO
 

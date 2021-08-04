@@ -207,8 +207,8 @@
         }
       ]
     },
-    "dev:release": {
-      "name": "dev:release",
+    "dev": {
+      "name": "dev",
       "steps": [
         {
           "spawn": "package"

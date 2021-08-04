@@ -1,5 +1,5 @@
 import * as github from '@actions/github';
-import { GithubPullRequest, GithubRelease } from './types';
+import { GithubIssue, GithubPullRequest, GithubRelease } from './types';
 export declare enum ActionMode {
     /**
      * Backfills previous pull requests and issues with release reminders
@@ -34,7 +34,8 @@ export declare class GithubClient {
     private readonly repo;
     constructor(octokit: HydratedOctokit, owner: string, repo: string);
     getLatestRelease(): Promise<GithubRelease>;
-    getPullRequestsFromCommit(commitSha: string): Promise<GithubPullRequest>;
+    getPullRequestsFromCommit(commitSha: string): Promise<GithubPullRequest[]>;
+    getIssue(issueNumber: number): Promise<GithubIssue>;
 }
 export declare class GitClient {
     private readonly workspace;

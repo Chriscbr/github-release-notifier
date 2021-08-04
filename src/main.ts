@@ -1,7 +1,8 @@
 import * as cp from 'child_process';
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { GithubPullRequest, GithubRelease } from './types';
+import { GithubIssue, GithubPullRequest, GithubRelease } from './types';
+import { dedupArray } from './util';
 
 export enum ActionMode {
   /**
@@ -70,14 +71,26 @@ export class GithubClient {
 
   async getLatestRelease(): Promise<GithubRelease> {
     const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/releases/latest`);
-    core.debug(`getLatestRelease: ${JSON.stringify(response)}`);
+    core.debug(`getLatestRelease: (${response.status}) ${response.data?.name}`);
 
     return response.data;
   }
 
-  async getPullRequestsFromCommit(commitSha: string): Promise<GithubPullRequest> {
-    const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/commits/${commitSha}/pulls`);
-    core.debug(`getPullRequestsFromCommit: ${JSON.stringify(response)}`);
+  async getPullRequestsFromCommit(commitSha: string): Promise<GithubPullRequest[]> {
+    const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/commits/${commitSha}/pulls`, {
+      // specify a media type because this feature is in preview
+      mediaType: {
+        previews: ['groot'],
+      },
+    });
+    core.debug(`getPullRequestsFromCommit: (${response.status}) ${response.data?.map((pr: GithubPullRequest) => pr.url).join('\n')}`);
+
+    return response.data;
+  }
+
+  async getIssue(issueNumber: number): Promise<GithubIssue> {
+    const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/issues/${issueNumber}`);
+    core.debug(`getIssue: (${response.status}) #${response.data?.number}`);
 
     return response.data;
   }
@@ -114,6 +127,8 @@ export class GitClient {
 }
 
 async function getPullRequests(gitClient: GitClient, githubClient: GithubClient, release: GithubRelease): Promise<GithubPullRequest[]> {
+  core.debug(`getting pull requests for release: ${release.name}`);
+
   const tag = release.tag_name;
   core.debug(`tag: ${tag}`);
 
@@ -124,20 +139,71 @@ async function getPullRequests(gitClient: GitClient, githubClient: GithubClient,
   core.debug(`commits: ${commits}`);
 
   const promises = commits.map((commitSha) => githubClient.getPullRequestsFromCommit(commitSha));
-  const promiseResults = (await Promise.allSettled(promises)).flat();
-  const pullRequests = [];
-  for (const result of promiseResults) {
-    if (result.status === 'fulfilled') {
-      pullRequests.push(result.value);
-    }
-  }
+  const pullRequests: GithubPullRequest[] = (await resolveAndFilter(promises)).flat();
+
+  // TODO: validate that the pull request was actually merged?
+  // https://docs.github.com/en/rest/reference/pulls#check-if-a-pull-request-has-been-merged
+
   core.debug(`pullRequests: ${pullRequests.map(pr => pr.url)}`);
 
   return pullRequests;
 }
 
-function getLinkedIssues(_pullRequests: GithubPullRequest[]): any[] { // TODO: type properly
-  return [];
+/**
+ * Returns a list of issue numbers mentioned in a pull request description.
+ * @see https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword
+ */
+function parseIssueNumbers(description: string): number[] {
+  const LINKED_ISSUE_REGEXES = [
+    /close #(\d+)/g,
+    /closes #(\d+)/g,
+    /closed #(\d+)/g,
+    /fix #(\d+)/g,
+    /fixes #(\d+)/g,
+    /fixed #(\d+)/g,
+    /resolve #(\d+)/g,
+    /resolves #(\d+)/g,
+    /resolved #(\d+)/g,
+  ];
+
+  const output = [];
+  for (const re of LINKED_ISSUE_REGEXES) {
+    const matches = description.matchAll(re);
+    for (const match of matches) {
+      const issueNumber = match[1]; // grab the captured group
+      output.push(parseInt(issueNumber));
+    }
+  }
+  return output;
+}
+
+async function getLinkedIssues(githubClient: GithubClient, pullRequest: GithubPullRequest): Promise<GithubIssue[]> {
+  core.debug(`getting linked issues for pull request: #${pullRequest.number}`);
+
+  const prBody = pullRequest.body.toLowerCase();
+
+  const issueNumbers: number[] = dedupArray(parseIssueNumbers(prBody));
+  core.debug(`issue numbers found: [${issueNumbers.map((num) => '#' + num).join(',')}]`);
+
+  const issues: GithubIssue[] = await resolveAndFilter(issueNumbers.map((issueNum) => githubClient.getIssue(issueNum)));
+  core.debug(`issues: ${issues.map(issue => issue.url).join('\n')}`);
+
+  return issues;
+}
+
+async function resolveAndFilter<T>(promises: Promise<T>[]): Promise<T[]> {
+  const promiseResults = await Promise.allSettled(promises);
+  const output = [];
+  for (const result of promiseResults) {
+    if (result.status === 'fulfilled') {
+      output.push(result.value);
+    }
+  }
+  return output;
+}
+
+function filterAlreadyCommentedIssues(_githubClient: GithubClient, issues: GithubIssue[]): GithubIssue[] {
+  return issues;
 }
 
 async function run(): Promise<void> {
@@ -161,10 +227,14 @@ async function run(): Promise<void> {
     const githubClient = new GithubClient(octokit, owner, repo);
     const gitClient = new GitClient();
 
+    // if (process.env.DEBUG_)
     const latestRelease = await githubClient.getLatestRelease();
     const pullRequests = await getPullRequests(gitClient, githubClient, latestRelease);
 
-    getLinkedIssues(pullRequests); // TODO
+    const issuesPerPullRequest: GithubIssue[][] = await resolveAndFilter(pullRequests.map((pr) => getLinkedIssues(githubClient, pr)));
+    let issues = dedupArray(issuesPerPullRequest.flat());
+
+    issues = filterAlreadyCommentedIssues(githubClient, issues);
 
     // const totalComments = await commentOn(pullRequests, issues, release);
 

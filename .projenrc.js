@@ -1,5 +1,4 @@
 const { TypeScriptProject, YamlFile } = require('projen');
-const { TaskWorkflow } = require('projen/lib/github');
 const { JobPermission } = require('projen/lib/github/workflows-model');
 
 const ACTION_NAME = 'release-reminders';
@@ -75,26 +74,5 @@ postRelease.addJobs({
     ],
   },
 });
-
-// project.buildWorkflow.addJobs({
-//   integ: {
-//     permissions: {
-//       contents: JobPermission.READ,
-//       issues: JobPermission.WRITE,
-//     },
-//     runsOn: 'ubuntu-latest',
-//     steps: [
-//       {
-//         uses: 'actions/checkout@v2',
-//       },
-//       {
-//         uses: './',
-//         with: {
-//           mode: 'continuous',
-//         },
-//       },
-//     ],
-//   },
-// });
 
 project.synth();

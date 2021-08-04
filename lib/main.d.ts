@@ -13,7 +13,7 @@ export declare enum ActionMode {
      * Add release reminders to issues and pull requests for only the
      * latest available release.
      */
-    LATEST = "continuous"
+    LATEST = "latest"
 }
 export interface ActionOptions {
     /**

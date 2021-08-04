@@ -34,13 +34,13 @@ const actionYaml = new YamlFile(project, 'action.yml', {
     inputs: {
       token: {
         required: false,
-        description: 'input description here', // TODO
+        description: 'GitHub token used for making GitHub API calls (defaults to GITHUB_TOKEN)',
         default: '${{ github.token }}',
       },
       mode: {
         required: true,
-        description: 'input description here', // TODO
-        default: 'continuous', // TODO
+        description: 'Whether to add reminders for the latest release, or to backfill and add reminders for all releases.',
+        default: 'latest',
       },
     },
     runs: {
@@ -74,7 +74,7 @@ postRelease.addJobs({
       {
         uses: './',
         with: {
-          mode: 'continuous',
+          mode: 'latest',
         },
       },
     ],

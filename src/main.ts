@@ -17,7 +17,7 @@ export enum ActionMode {
    * Add release reminders to issues and pull requests for only the
    * latest available release.
    */
-  LATEST = 'continuous'
+  LATEST = 'latest'
 }
 
 export interface ActionOptions {
@@ -168,7 +168,6 @@ async function run(): Promise<void> {
 
     // const totalComments = await commentOn(pullRequests, issues, release);
 
-    core.info('Success!');
     core.setOutput('total-comments', 0); // TODO
   } catch (error) {
     core.setFailed(error.message);

@@ -50,6 +50,12 @@ const actionYaml = new YamlFile(project, 'action.yml', {
   },
 });
 
+// task to simulate running the action locally
+// requires GITHUB_TOKEN to be set in your shell
+const devTest = project.addTask('dev:release');
+devTest.spawn(project.packageTask);
+devTest.exec('act release -s GITHUB_TOKEN=$GITHUB_TOKEN');
+
 const postRelease = project.github.addWorkflow('post-release');
 postRelease.on({
   release: {},

@@ -207,6 +207,17 @@
         }
       ]
     },
+    "dev:release": {
+      "name": "dev:release",
+      "steps": [
+        {
+          "spawn": "package"
+        },
+        {
+          "exec": "act release -s GITHUB_TOKEN=$GITHUB_TOKEN"
+        }
+      ]
+    },
     "release": {
       "name": "release",
       "description": "Prepare a release from \"main\" branch",

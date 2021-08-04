@@ -35,13 +35,26 @@ export interface ActionOptions {
   readonly maximumComments?: number;
 }
 
+function getContext() {
+  core.debug(`owner: ${github.context.repo.owner}`);
+  core.debug(`repo: ${github.context.repo.repo}`);
+  return github.context.repo;
+}
+
 function getOptions(): ActionOptions {
+  core.debug(`mode: ${core.getInput('mode')}`);
+  core.debug(`maximum-comments: ${core.getInput('maximum-comments')}`);
+
   const mode: ActionMode | undefined = (<any>ActionMode)[core.getInput('mode')];
   const maximumComments: number = parseInt(core.getInput('maximum-comments'), 10); // may be NaN
-  return {
+  const options = {
     mode: mode ?? ActionMode.LATEST,
     maximumComments: maximumComments || 50,
   };
+
+  core.debug(`options: ${JSON.stringify(options)}`);
+
+  return options;
 }
 
 type HydratedOctokit = ReturnType<typeof github.getOctokit>
@@ -132,19 +145,19 @@ function getLinkedIssues(_pullRequests: GithubPullRequest[]): any[] { // TODO: t
 
 async function run(): Promise<void> {
   try {
-    const token = core.getInput('token', { required: true });
-    const { owner, repo } = github.context.repo;
-    core.debug(`owner: ${owner}`);
-    core.debug(`repo: ${repo}`);
-    core.debug(core.getInput('mode'));
-    core.debug(core.getInput('maximum-comments'));
-    core.debug(`workspace: ${process.env.GITHUB_WORKSPACE}`);
-
     const options = getOptions();
-    core.debug(`options: ${JSON.stringify(options)}`);
+    const { owner, repo } = getContext();
 
     if (options.mode !== ActionMode.LATEST) {
       throw new Error('Only "latest" mode is currently supported.');
+    }
+
+    const token = core.getInput('token', { required: true });
+
+    if (token === 'DEBUG_TOKEN') {
+      core.info('DEBUG_TOKEN has been provided, exiting early.');
+      core.setOutput('total-comments', 0);
+      return;
     }
 
     const octokit = github.getOctokit(token);

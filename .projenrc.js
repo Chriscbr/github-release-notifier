@@ -25,6 +25,7 @@ const project = new TypeScriptProject({
 project.packageTask.reset('ncc build --source-map --license licenses.txt');
 project.package.addField('main', 'lib/main.js');
 project.addGitIgnore('!/dist');
+project.annotateGenerated('/dist/**');
 
 const actionYaml = new YamlFile(project, 'action.yml', {
   obj: {

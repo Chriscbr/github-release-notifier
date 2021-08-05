@@ -72,6 +72,7 @@ const devTest = project.addTask('dev');
 devTest.spawn(project.packageTask);
 devTest.exec('act release -s GITHUB_TOKEN=$GITHUB_TOKEN');
 
+// post-release workflow
 const postRelease = project.github.addWorkflow('post-release');
 postRelease.on({
   release: {},

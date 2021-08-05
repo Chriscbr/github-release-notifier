@@ -8,6 +8,7 @@ test('inputs are processed', () => {
   process.env['INPUT_MAXIMUM-COMMENTS'] = '75';
   process.env.GITHUB_REPOSITORY = 'octocat/Hello-World';
   process.env.GITHUB_WORKSPACE = __dirname;
+  process.env.GITHUB_ACTOR = 'github-automation';
   process.env.INPUT_TOKEN = 'DEBUG_TOKEN';
 
   const node = process.execPath;

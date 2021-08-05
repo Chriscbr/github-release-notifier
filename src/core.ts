@@ -2,7 +2,7 @@ import * as cp from 'child_process';
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { ISSUE_COMMENT_TEMPLATE, LINKED_ISSUE_REGEXES, PR_COMMENT_TEMPLATE } from './constants';
-import { GithubIssue, GithubPullRequest, GithubRelease } from './types';
+import { GithubIssue, GithubIssueComment, GithubPullRequest, GithubRelease } from './types';
 import { dedupArray, resolveAndReturnSuccesses } from './util';
 
 export enum ActionMode {
@@ -39,7 +39,12 @@ export interface ActionOptions {
 function getContext() {
   core.debug(`owner: ${github.context.repo.owner}`);
   core.debug(`repo: ${github.context.repo.repo}`);
-  return github.context.repo;
+  core.debug(`actor: ${github.context.actor}`);
+  return {
+    owner: github.context.repo.owner,
+    repo: github.context.repo.repo,
+    actor: github.context.actor,
+  };
 }
 
 function getOptions(): ActionOptions {
@@ -60,14 +65,20 @@ function getOptions(): ActionOptions {
 
 type HydratedOctokit = ReturnType<typeof github.getOctokit>
 
+export interface GithubClientOptions {
+  readonly owner: string;
+  readonly repo: string;
+}
+
 export class GithubClient {
   private readonly octokit: HydratedOctokit;
   private readonly owner: string;
   private readonly repo: string;
-  constructor(octokit: HydratedOctokit, owner: string, repo: string) {
+
+  constructor(octokit: HydratedOctokit, options: GithubClientOptions) {
     this.octokit = octokit;
-    this.owner = owner;
-    this.repo = repo;
+    this.owner = options.owner;
+    this.repo = options.repo;
   }
 
   async getLatestRelease(): Promise<GithubRelease> {
@@ -84,23 +95,30 @@ export class GithubClient {
         previews: ['groot'],
       },
     });
-    core.debug(`getPullRequestsFromCommit: (${response.status}) ${response.data?.map((pr: GithubPullRequest) => pr.url).join('\n')}`);
+    core.debug(`getPullRequestsFromCommit on commitSha ${commitSha}: (${response.status}) ${response.data?.map((pr: GithubPullRequest) => pr.url).join('\n')}`);
 
     return response.data;
   }
 
   async getIssue(issueNumber: number): Promise<GithubIssue> {
     const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/issues/${issueNumber}`);
-    core.debug(`getIssue: (${response.status}) #${response.data?.number}`);
+    core.debug(`getIssue on issue #${issueNumber}: (${response.status}) #${response.data?.number}`);
+
+    return response.data;
+  }
+
+  async listIssueComments(issueNumber: number): Promise<GithubIssueComment[]> {
+    const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/issues/${issueNumber}/comments`);
+    core.debug(`listIssueComments on issue #${issueNumber}: (${response.status}) ${response.data.length} comments found`);
 
     return response.data;
   }
 
   async addComment(issueNumber: number, body: string): Promise<void> {
-    core.debug(`adding comment to #${issueNumber}...`);
-    await this.octokit.request(`POST /repos/${this.owner}/${this.repo}/issues/${issueNumber}/comments`, {
+    const response = await this.octokit.request(`POST /repos/${this.owner}/${this.repo}/issues/${issueNumber}/comments`, {
       body: body,
     });
+    core.debug(`addComment on issue #${issueNumber}: (${response.status})`);
   }
 }
 
@@ -187,21 +205,49 @@ export async function getLinkedIssues(githubClient: GithubClient, pullRequest: G
   return issues;
 }
 
-// TODO: filter out PRs/issues that have already been commented on
-export async function commentOn(
-  githubClient: GithubClient,
-  pullRequest: GithubPullRequest,
-  issues: GithubIssue[],
-  repo: string,
-  release: GithubRelease,
-): Promise<number> {
+export async function hasAlreadyCommentedOn(githubClient: GithubClient, actor: string, issueNumber: number) {
+  core.debug(`checking if actor ${actor} has already commented on issue #${issueNumber}`);
+
+  const comments = await githubClient.listIssueComments(issueNumber);
+  const commenters = comments.map((comment) => comment.user.login);
+  core.debug(`found commenters: ${commenters}`);
+
+  const hasAlreadyCommented = commenters.includes(actor);
+  core.debug(`has ${actor} already commented? ${hasAlreadyCommented}`);
+
+  return hasAlreadyCommented;
+}
+
+export interface CommentOnOptions {
+  readonly githubClient: GithubClient;
+  readonly pullRequest: GithubPullRequest;
+  readonly issues: GithubIssue[];
+  readonly repo: string;
+  readonly actor: string;
+  readonly release: GithubRelease;
+}
+
+export async function commentOn(options: CommentOnOptions): Promise<number> {
   const promises = [];
+  const { githubClient, pullRequest, issues, repo, actor, release } = options;
+
+  // The way we currently handle promises could be optimized by chaining the
+  // "hasAlreadyCommentedOn" promises with the "addComment" promises so more
+  // work can be done in parallel - but for now this works. Some care is
+  // needed to parallelize this without making the logs harder to read.
 
   const prMessage = PR_COMMENT_TEMPLATE(repo, release.name);
-  promises.push(githubClient.addComment(pullRequest.number, prMessage));
+  let skipCommenting = await hasAlreadyCommentedOn(githubClient, actor, pullRequest.number);
+  if (!skipCommenting) {
+    promises.push(githubClient.addComment(pullRequest.number, prMessage));
+  }
 
   for (const issue of issues) {
     const issueMessage = ISSUE_COMMENT_TEMPLATE(pullRequest.number, repo, release.name);
+    skipCommenting = await hasAlreadyCommentedOn(githubClient, actor, issue.number);
+    if (!skipCommenting) {
+      promises.push(githubClient.addComment(issue.number, issueMessage));
+    }
     promises.push(githubClient.addComment(issue.number, issueMessage));
   }
 
@@ -220,7 +266,7 @@ export async function commentOn(
 export async function run(): Promise<void> {
   try {
     const options = getOptions();
-    const { owner, repo } = getContext();
+    const { owner, repo, actor } = getContext();
 
     if (options.mode !== ActionMode.LATEST) {
       throw new Error('Only "latest" mode is currently supported.');
@@ -235,16 +281,16 @@ export async function run(): Promise<void> {
     }
 
     const octokit = github.getOctokit(token);
-    const githubClient = new GithubClient(octokit, owner, repo);
+    const githubClient = new GithubClient(octokit, { owner, repo });
     const gitClient = new GitClient();
 
-    const latestRelease = await githubClient.getLatestRelease();
-    const pullRequests = await getPullRequests(gitClient, githubClient, latestRelease);
+    const release = await githubClient.getLatestRelease();
+    const pullRequests = await getPullRequests(gitClient, githubClient, release);
 
     let totalComments = 0;
     for (const pullRequest of pullRequests) {
       const issues = await getLinkedIssues(githubClient, pullRequest);
-      totalComments += await commentOn(githubClient, pullRequest, issues, repo, latestRelease);
+      totalComments += await commentOn({ githubClient, pullRequest, issues, repo, actor, release });
     }
 
     core.setOutput('total-comments', totalComments);

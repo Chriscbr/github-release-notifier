@@ -1,5 +1,5 @@
 {
-  "name": "release-reminders",
+  "name": "github-release-notifier",
   "description": "Updates issues and pull requests when relevant code changes are published to GitHub releases.",
   "scripts": {
     "clobber": "npx projen clobber",
@@ -20,6 +20,11 @@
     "dev": "npx projen dev",
     "release": "npx projen release",
     "projen": "npx projen"
+  },
+  "author": {
+    "name": "Amazon Web Services",
+    "url": "https://aws.amazon.com",
+    "organization": false
   },
   "devDependencies": {
     "@jest/globals": "^27.0.6",

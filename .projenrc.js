@@ -1,12 +1,15 @@
 const { TypeScriptProject, YamlFile } = require('projen');
 const { JobPermission } = require('projen/lib/github/workflows-model');
 
-const ACTION_NAME = 'release-reminders';
+const ACTION_NAME = 'github-release-notifier';
 const ACTION_DESCRIPTION = 'Updates issues and pull requests when relevant code changes are published to GitHub releases.';
 
 const project = new TypeScriptProject({
   name: ACTION_NAME,
+  authorName: 'Amazon Web Services',
+  authorUrl: 'https://aws.amazon.com',
   description: ACTION_DESCRIPTION,
+
   defaultReleaseBranch: 'main',
 
   deps: ['@actions/core', '@actions/github'],
@@ -27,7 +30,10 @@ project.package.addField('main', 'lib/main.js');
 project.addGitIgnore('!/dist');
 project.annotateGenerated('/dist/**');
 
-const actionYaml = new YamlFile(project, 'action.yml', {
+// provide metadata for GitHub action
+// https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions
+// TODO: add as projen component?
+new YamlFile(project, 'action.yml', {
   obj: {
     name: ACTION_NAME,
     description: ACTION_DESCRIPTION,
@@ -44,9 +50,18 @@ const actionYaml = new YamlFile(project, 'action.yml', {
         default: 'latest',
       },
     },
+    outputs: {
+      'total-comments': {
+        description: 'The total number of comments added.',
+      },
+    },
     runs: {
       using: 'node12',
       main: 'dist/index.js',
+    },
+    branding: {
+      icon: 'bell',
+      color: 'purple',
     },
   },
 });

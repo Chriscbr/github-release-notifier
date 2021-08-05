@@ -117,16 +117,17 @@ export class GitClient {
     return process.env.GITHUB_WORKSPACE;
   }
 
-  getTag(tag: string): string {
-    return cp.execSync(`git show-ref -s ${tag}`, { cwd: this.workspace }).toString().trim();
-  }
-
+  /**
+   * Returns the tag that preceeds the provided one, if any. If this errors
+   * with a valid tag, it is likely that the repository hasn't been updated
+   * with the latest tags and a `git fetch` needs to be run.
+   */
   getPreviousTag(tag: string): string {
     return cp.execSync(`git describe --tags --abbrev=0 ${tag}^`, { cwd: this.workspace }).toString().trim();
   }
 
   /**
-   * Returns a list of commit hashes beginning AFTER fromTag, up to and
+   * Returns a list of commit hashes AFTER fromTag, up to and
    * INCLUDING toTag.
    */
   getCommitsBetweenTags(fromTag: string, toTag: string): string[] {
@@ -208,7 +209,7 @@ export async function commentOn(
   let total = 0;
   for (const result of results) {
     if (result.status === 'rejected') {
-      core.error(`error commenting on issue/pr: ${result.reason}`);
+      core.error(`could not comment on issue/pr: ${result.reason}`);
       continue;
     }
     total += 1;

@@ -1,1 +1,1 @@
-# release-reminders
+# github-release-notifier

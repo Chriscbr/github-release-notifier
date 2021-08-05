@@ -1,6 +1,7 @@
 import * as cp from 'child_process';
 import * as core from '@actions/core';
 import * as github from '@actions/github';
+import { ISSUE_COMMENT_TEMPLATE, LINKED_ISSUE_REGEXES, PR_COMMENT_TEMPLATE } from './constants';
 import { GithubIssue, GithubPullRequest, GithubRelease } from './types';
 import { dedupArray } from './util';
 
@@ -94,6 +95,13 @@ export class GithubClient {
 
     return response.data;
   }
+
+  async addComment(issueNumber: number, body: string): Promise<void> {
+    core.debug(`adding comment to #${issueNumber}...`);
+    await this.octokit.request(`POST /repos/${this.owner}/${this.repo}/issues/${issueNumber}/comments`, {
+      body: body,
+    });
+  }
 }
 
 export class GitClient {
@@ -139,7 +147,7 @@ async function getPullRequests(gitClient: GitClient, githubClient: GithubClient,
   core.debug(`commits: ${commits}`);
 
   const promises = commits.map((commitSha) => githubClient.getPullRequestsFromCommit(commitSha));
-  const pullRequests: GithubPullRequest[] = (await resolveAndFilter(promises)).flat();
+  const pullRequests: GithubPullRequest[] = (await resolveAndReturnSuccesses(promises)).flat();
 
   // TODO: validate that the pull request was actually merged?
   // https://docs.github.com/en/rest/reference/pulls#check-if-a-pull-request-has-been-merged
@@ -154,18 +162,6 @@ async function getPullRequests(gitClient: GitClient, githubClient: GithubClient,
  * @see https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword
  */
 function parseIssueNumbers(description: string): number[] {
-  const LINKED_ISSUE_REGEXES = [
-    /close #(\d+)/g,
-    /closes #(\d+)/g,
-    /closed #(\d+)/g,
-    /fix #(\d+)/g,
-    /fixes #(\d+)/g,
-    /fixed #(\d+)/g,
-    /resolve #(\d+)/g,
-    /resolves #(\d+)/g,
-    /resolved #(\d+)/g,
-  ];
-
   const output = [];
   for (const re of LINKED_ISSUE_REGEXES) {
     const matches = description.matchAll(re);
@@ -181,17 +177,16 @@ async function getLinkedIssues(githubClient: GithubClient, pullRequest: GithubPu
   core.debug(`getting linked issues for pull request: #${pullRequest.number}`);
 
   const prBody = pullRequest.body.toLowerCase();
-
   const issueNumbers: number[] = dedupArray(parseIssueNumbers(prBody));
   core.debug(`issue numbers found: [${issueNumbers.map((num) => '#' + num).join(',')}]`);
 
-  const issues: GithubIssue[] = await resolveAndFilter(issueNumbers.map((issueNum) => githubClient.getIssue(issueNum)));
+  const issues: GithubIssue[] = await resolveAndReturnSuccesses(issueNumbers.map((issueNum) => githubClient.getIssue(issueNum)));
   core.debug(`issues: ${issues.map(issue => issue.url).join('\n')}`);
 
   return issues;
 }
 
-async function resolveAndFilter<T>(promises: Promise<T>[]): Promise<T[]> {
+async function resolveAndReturnSuccesses<T>(promises: Promise<T>[]): Promise<T[]> {
   const promiseResults = await Promise.allSettled(promises);
   const output = [];
   for (const result of promiseResults) {
@@ -202,8 +197,34 @@ async function resolveAndFilter<T>(promises: Promise<T>[]): Promise<T[]> {
   return output;
 }
 
-function filterAlreadyCommentedIssues(_githubClient: GithubClient, issues: GithubIssue[]): GithubIssue[] {
-  return issues;
+// TODO: filter out PRs/issues that have already been commented on
+async function commentOn(
+  githubClient: GithubClient,
+  pullRequest: GithubPullRequest,
+  issues: GithubIssue[],
+  repo: string,
+  release: GithubRelease,
+): Promise<number> {
+  const promises = [];
+
+  const prMessage = PR_COMMENT_TEMPLATE(repo, release.name);
+  promises.push(githubClient.addComment(pullRequest.number, prMessage));
+
+  for (const issue of issues) {
+    const issueMessage = ISSUE_COMMENT_TEMPLATE(pullRequest.number, repo, release.name);
+    promises.push(githubClient.addComment(issue.number, issueMessage));
+  }
+
+  const results = await Promise.allSettled(promises);
+  let total = 0;
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      core.error(`error commenting on issue/pr: ${result.reason}`);
+      continue;
+    }
+    total += 1;
+  }
+  return total;
 }
 
 async function run(): Promise<void> {
@@ -227,18 +248,16 @@ async function run(): Promise<void> {
     const githubClient = new GithubClient(octokit, owner, repo);
     const gitClient = new GitClient();
 
-    // if (process.env.DEBUG_)
     const latestRelease = await githubClient.getLatestRelease();
     const pullRequests = await getPullRequests(gitClient, githubClient, latestRelease);
 
-    const issuesPerPullRequest: GithubIssue[][] = await resolveAndFilter(pullRequests.map((pr) => getLinkedIssues(githubClient, pr)));
-    let issues = dedupArray(issuesPerPullRequest.flat());
+    let totalComments = 0;
+    for (const pullRequest of pullRequests) {
+      const issues = await getLinkedIssues(githubClient, pullRequest);
+      totalComments += await commentOn(githubClient, pullRequest, issues, repo, latestRelease);
+    }
 
-    issues = filterAlreadyCommentedIssues(githubClient, issues);
-
-    // const totalComments = await commentOn(pullRequests, issues, release);
-
-    core.setOutput('total-comments', 0); // TODO
+    core.setOutput('total-comments', totalComments);
   } catch (error) {
     core.setFailed(error.message);
   }

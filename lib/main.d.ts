@@ -36,6 +36,7 @@ export declare class GithubClient {
     getLatestRelease(): Promise<GithubRelease>;
     getPullRequestsFromCommit(commitSha: string): Promise<GithubPullRequest[]>;
     getIssue(issueNumber: number): Promise<GithubIssue>;
+    addComment(issueNumber: number, body: string): Promise<void>;
 }
 export declare class GitClient {
     private readonly workspace;

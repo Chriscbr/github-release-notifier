@@ -9,7 +9,7 @@ const project = new TypeScriptProject({
   description: ACTION_DESCRIPTION,
   defaultReleaseBranch: 'main',
 
-  deps: ['@actions/core', '@actions/github', 'octokit', '@octokit/types'],
+  deps: ['@actions/core', '@actions/github'],
   devDeps: ['@jest/globals', '@vercel/ncc'],
 
   tsconfig: {

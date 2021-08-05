@@ -76,6 +76,7 @@ devTest.exec('act release -s GITHUB_TOKEN=$GITHUB_TOKEN');
 const postRelease = project.github.addWorkflow('post-release');
 postRelease.on({
   release: {},
+  workflowDispatch: {},
 });
 postRelease.addJobs({
   reminders: {

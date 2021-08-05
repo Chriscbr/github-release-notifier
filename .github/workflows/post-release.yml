@@ -3,6 +3,7 @@
 name: post-release
 on:
   release: {}
+  workflow_dispatch: {}
 jobs:
   reminders:
     runs-on: ubuntu-latest

@@ -203,7 +203,7 @@ export async function getLinkedIssues(githubClient: GithubClient, pullRequest: G
 
   const { successes } = await resolveAndReturn(issueNumbers.map((issueNum) => githubClient.getIssue(issueNum)));
   const issues: GithubIssue[] = successes;
-  core.debug(`issues: ${issues.map(issue => issue.url).join(',')}`);
+  core.debug(`valid issue urls: ${issues.map(issue => issue.url).join(',')}`);
 
   return issues;
 }
@@ -225,33 +225,31 @@ export interface CommentOnOptions {
   readonly githubClient: GithubClient;
   readonly pullRequest: GithubPullRequest;
   readonly issues: GithubIssue[];
-  readonly repo: string;
   readonly actor: string;
   readonly release: GithubRelease;
 }
 
 export async function commentOn(options: CommentOnOptions): Promise<number> {
   const promises = [];
-  const { githubClient, pullRequest, issues, repo, actor, release } = options;
+  const { githubClient, pullRequest, issues, actor, release } = options;
 
   // The way we currently handle promises could be optimized by chaining the
   // "hasAlreadyCommentedOn" promises with the "addComment" promises so more
   // work can be done in parallel - but for now this works. Some care is
   // needed to parallelize this without making the logs harder to read.
 
-  const prMessage = PR_COMMENT_TEMPLATE(repo, release.name, release.url);
+  const prMessage = PR_COMMENT_TEMPLATE(release.name, release.html_url);
   let skipCommenting = await hasAlreadyCommentedOn(githubClient, actor, pullRequest.number);
   if (!skipCommenting) {
     promises.push(githubClient.addComment(pullRequest.number, prMessage));
   }
 
   for (const issue of issues) {
-    const issueMessage = ISSUE_COMMENT_TEMPLATE(pullRequest.number, repo, release.name, release.url);
+    const issueMessage = ISSUE_COMMENT_TEMPLATE(pullRequest.number, release.name, release.html_url);
     skipCommenting = await hasAlreadyCommentedOn(githubClient, actor, issue.number);
     if (!skipCommenting) {
       promises.push(githubClient.addComment(issue.number, issueMessage));
     }
-    promises.push(githubClient.addComment(issue.number, issueMessage));
   }
 
   const results = await Promise.allSettled(promises);
@@ -293,7 +291,7 @@ export async function run(): Promise<void> {
     let totalComments = 0;
     for (const pullRequest of pullRequests) {
       const issues = await getLinkedIssues(githubClient, pullRequest);
-      totalComments += await commentOn({ githubClient, pullRequest, issues, repo, actor, release });
+      totalComments += await commentOn({ githubClient, pullRequest, issues, actor, release });
     }
 
     core.setOutput('total-comments', totalComments);

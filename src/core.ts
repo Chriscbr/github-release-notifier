@@ -1,10 +1,13 @@
 import * as cp from 'child_process';
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { ISSUE_COMMENT_TEMPLATE, LINKED_ISSUE_REGEXES, PR_COMMENT_TEMPLATE } from './constants';
+import { GITHUB_RELEASE_NOTIFIER_TAG, ISSUE_COMMENT_TEMPLATE, LINKED_ISSUE_REGEXES, PR_COMMENT_TEMPLATE } from './constants';
 import { GithubAuthUser, GithubIssue, GithubIssueComment, GithubPullRequest, GithubRelease } from './types';
 import { dedupArray, resolveAndReturn } from './util';
 
+/**
+ * Determines what releases the action will generate notifications for.
+ */
 export enum ActionMode {
   /**
    * Backfills previous pull requests and issues with release reminders
@@ -22,6 +25,9 @@ export enum ActionMode {
   LATEST = 'latest'
 }
 
+/**
+ * Options for configuring the action in a GitHub workflow.
+ */
 export interface ActionOptions {
   /**
    * Mode of running the action.
@@ -39,12 +45,7 @@ export interface ActionOptions {
 function getContext() {
   core.debug(`owner: ${github.context.repo.owner}`);
   core.debug(`repo: ${github.context.repo.repo}`);
-  core.debug(`actor: ${github.context.actor}`);
-  return {
-    owner: github.context.repo.owner,
-    repo: github.context.repo.repo,
-    actor: github.context.actor,
-  };
+  return github.context.repo;
 }
 
 function getOptions(): ActionOptions {
@@ -215,30 +216,36 @@ export async function getLinkedIssues(githubClient: GithubClient, pullRequest: G
   return issues;
 }
 
-export async function hasAlreadyCommentedOn(githubClient: GithubClient, actor: string, issueNumber: number) {
-  core.debug(`checking if actor ${actor} has already commented on issue #${issueNumber}`);
+export async function hasAlreadyCommentedOn(githubClient: GithubClient, issueNumber: number): Promise<boolean> {
+  core.debug(`checking if github action has already commented on issue #${issueNumber}`);
 
   const comments = await githubClient.listIssueComments(issueNumber);
-  const commenters = comments.map((comment) => comment.user.login);
-  core.debug(`commenters found: [${commenters}]`);
 
-  const hasAlreadyCommented = commenters.includes(actor);
-  core.debug(`has ${actor} already commented? ${hasAlreadyCommented}`);
+  for (const comment of comments) {
+    if (isCommentCreatedByAction(comment)) {
+      core.debug(`comment (${comment.html_url}) was created by an action`);
+      return false;
+    }
+  }
+  core.debug('no comments created by actions found');
 
-  return hasAlreadyCommented;
+  return true;
+}
+
+export function isCommentCreatedByAction(comment: GithubIssueComment): boolean {
+  return comment.body.includes(GITHUB_RELEASE_NOTIFIER_TAG);
 }
 
 export interface CommentOnOptions {
   readonly githubClient: GithubClient;
   readonly pullRequest: GithubPullRequest;
   readonly issues: GithubIssue[];
-  readonly actor: string;
   readonly release: GithubRelease;
 }
 
 export async function commentOn(options: CommentOnOptions): Promise<number> {
   const promises = [];
-  const { githubClient, pullRequest, issues, actor, release } = options;
+  const { githubClient, pullRequest, issues, release } = options;
 
   // The way we currently handle promises could be optimized by chaining the
   // "hasAlreadyCommentedOn" promises with the "addComment" promises so more
@@ -246,14 +253,14 @@ export async function commentOn(options: CommentOnOptions): Promise<number> {
   // needed to parallelize this without making the logs harder to read.
 
   const prMessage = PR_COMMENT_TEMPLATE(release.name, release.html_url);
-  let skipCommenting = await hasAlreadyCommentedOn(githubClient, actor, pullRequest.number);
+  let skipCommenting = await hasAlreadyCommentedOn(githubClient, pullRequest.number);
   if (!skipCommenting) {
     promises.push(githubClient.addComment(pullRequest.number, prMessage));
   }
 
   for (const issue of issues) {
     const issueMessage = ISSUE_COMMENT_TEMPLATE(pullRequest.number, release.name, release.html_url);
-    skipCommenting = await hasAlreadyCommentedOn(githubClient, actor, issue.number);
+    skipCommenting = await hasAlreadyCommentedOn(githubClient, issue.number);
     if (!skipCommenting) {
       promises.push(githubClient.addComment(issue.number, issueMessage));
     }
@@ -274,7 +281,7 @@ export async function commentOn(options: CommentOnOptions): Promise<number> {
 export async function run(): Promise<void> {
   try {
     const options = getOptions();
-    const { owner, repo, actor } = getContext();
+    const { owner, repo } = getContext();
 
     if (options.mode !== ActionMode.LATEST) {
       throw new Error('Only "latest" mode is currently supported.');
@@ -301,7 +308,7 @@ export async function run(): Promise<void> {
     let totalComments = 0;
     for (const pullRequest of pullRequests) {
       const issues = await getLinkedIssues(githubClient, pullRequest);
-      totalComments += await commentOn({ githubClient, pullRequest, issues, actor, release });
+      totalComments += await commentOn({ githubClient, pullRequest, issues, release });
     }
 
     core.setOutput('total-comments', totalComments);

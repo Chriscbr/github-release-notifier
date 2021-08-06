@@ -1,6 +1,6 @@
 // most examples generated from actual API calls, or provided from GitHub API docs
 
-const exampleRelease = {
+export const exampleRelease = {
   url: 'https://api.github.com/repos/facebook/create-react-app/releases/3720113',
   assets_url: 'https://api.github.com/repos/facebook/create-react-app/releases/3720113/assets',
   upload_url: 'https://uploads.github.com/repos/facebook/create-react-app/releases/3720113/assets{?name,label}',
@@ -42,7 +42,7 @@ const exampleRelease = {
   body: '- Initial public release\n',
 };
 
-const exampleGithubTag = {
+export const exampleGithubTag = {
   name: 'v0.1.0',
   zipball_url: 'https://api.github.com/repos/facebook/create-react-app/zipball/refs/tags/v0.1.0',
   tarball_url: 'https://api.github.com/repos/facebook/create-react-app/tarball/refs/tags/v0.1.0',
@@ -53,7 +53,7 @@ const exampleGithubTag = {
   node_id: 'MDM6UmVmNjM1MzcyNDk6cmVmcy90YWdzL3YwLjEuMA==',
 };
 
-const exampleGitTag = {
+export const exampleGitTag = {
   ref: 'refs/tags/v0.1.0',
   node_id: 'MDM6UmVmNjM1MzcyNDk6cmVmcy90YWdzL3YwLjEuMA==',
   url: 'https://api.github.com/repos/facebook/create-react-app/git/refs/tags/v0.1.0',
@@ -64,7 +64,7 @@ const exampleGitTag = {
   },
 };
 
-const examplePullRequest = {
+export const examplePullRequest = {
   url: 'https://api.github.com/repos/octocat/Hello-World/pulls/1347',
   id: 1,
   node_id: 'MDExOlB1bGxSZXF1ZXN0MQ==',
@@ -583,7 +583,7 @@ const examplePullRequest = {
   draft: false,
 };
 
-const exampleIssue = {
+export const exampleIssue = {
   id: 1,
   node_id: 'MDU6SXNzdWUx',
   url: 'https://api.github.com/repos/octocat/Hello-World/issues/1347',
@@ -741,7 +741,7 @@ const exampleIssue = {
   author_association: 'COLLABORATOR',
 };
 
-const exampleIssueComment = {
+export const exampleIssueComment = {
   id: 1,
   node_id: 'MDEyOklzc3VlQ29tbWVudDE=',
   url: 'https://api.github.com/repos/octocat/Hello-World/issues/comments/1',
@@ -773,7 +773,7 @@ const exampleIssueComment = {
   author_association: 'COLLABORATOR',
 };
 
-const exampleAuthUser = {
+export const exampleAuthUser = {
   login: 'octocat',
   id: 1,
   node_id: 'MDQ6VXNlcjE=',

@@ -9,7 +9,6 @@ jobs:
       contents: read
       issues: write
       pull-requests: write
-      metadata: read
     steps:
       - uses: actions/checkout@v2
         with:

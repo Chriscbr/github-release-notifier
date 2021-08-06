@@ -46,6 +46,7 @@ yarn-error.log*
 !/package.json
 !/src
 !/test
+!/test/fixtures/workflow.yml
 !/tsconfig.eslint.json
 !/tsconfig.jest.json
 !/tsconfig.json

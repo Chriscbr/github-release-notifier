@@ -214,7 +214,7 @@
           "spawn": "package"
         },
         {
-          "exec": "act release -s GITHUB_TOKEN=$GITHUB_TOKEN"
+          "exec": "act release -a github-actions -s GITHUB_TOKEN=$GITHUB_TOKEN -W test/fixtures/workflow.yml"
         }
       ]
     },

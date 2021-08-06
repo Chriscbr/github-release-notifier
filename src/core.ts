@@ -2,7 +2,7 @@ import * as cp from 'child_process';
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { ISSUE_COMMENT_TEMPLATE, LINKED_ISSUE_REGEXES, PR_COMMENT_TEMPLATE } from './constants';
-import { GithubIssue, GithubIssueComment, GithubPullRequest, GithubRelease } from './types';
+import { GithubAuthUser, GithubIssue, GithubIssueComment, GithubPullRequest, GithubRelease } from './types';
 import { dedupArray, resolveAndReturn } from './util';
 
 export enum ActionMode {
@@ -119,6 +119,13 @@ export class GithubClient {
       body: body,
     });
     core.debug(`addComment on issue #${issueNumber}: (${response.status})`);
+  }
+
+  async getAuthenticatedUser(): Promise<GithubAuthUser> {
+    const response = await this.octokit.request('GET /user');
+    core.debug(`getAuthenticatedUser: ${JSON.stringify(response)}`);
+
+    return response.data as GithubAuthUser;
   }
 }
 
@@ -284,6 +291,9 @@ export async function run(): Promise<void> {
     const octokit = github.getOctokit(token);
     const githubClient = new GithubClient(octokit, { owner, repo });
     const gitClient = new GitClient();
+
+    // just calling for debugging purposes
+    await githubClient.getAuthenticatedUser();
 
     const release = await githubClient.getLatestRelease();
     const pullRequests = await getPullRequests(gitClient, githubClient, release);

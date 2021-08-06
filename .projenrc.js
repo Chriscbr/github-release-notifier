@@ -66,12 +66,6 @@ new YamlFile(project, 'action.yml', {
   },
 });
 
-// task to simulate running the action locally
-// requires GITHUB_TOKEN to be set in your shell
-const devTest = project.addTask('dev');
-devTest.spawn(project.packageTask);
-devTest.exec('act release -s GITHUB_TOKEN=$GITHUB_TOKEN');
-
 project.release.addJobs({
   release_notifier: {
     needs: 'release',
@@ -95,6 +89,45 @@ project.release.addJobs({
         },
       },
     ],
+  },
+});
+
+// Set up a task and custom workflow for testing the action locally.
+// Can be used in conjunction with 'yarn:watch'.
+// Requires GITHUB_TOKEN to be set in your shell.
+
+const devTest = project.addTask('dev');
+devTest.spawn(project.packageTask);
+devTest.exec('act release -a github-actions -s GITHUB_TOKEN=$GITHUB_TOKEN -W test/fixtures/workflow.yml');
+
+new YamlFile(project, 'test/fixtures/workflow.yml', {
+  obj: {
+    name: 'test',
+    on: 'release',
+    jobs: {
+      test: {
+        'runs-on': 'ubuntu-latest',
+        'permissions': {
+          'contents': JobPermission.READ,
+          'issues': JobPermission.WRITE,
+          'pull-requests': JobPermission.WRITE,
+        },
+        'steps': [
+          {
+            uses: 'actions/checkout@v2',
+            with: {
+              'fetch-depth': 0,
+            },
+          },
+          {
+            uses: './',
+            with: {
+              mode: 'latest',
+            },
+          },
+        ],
+      },
+    },
   },
 });
 

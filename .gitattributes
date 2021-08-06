@@ -18,6 +18,7 @@
 /dist/**                                   	linguist-generated
 /LICENSE                                   	linguist-generated
 /package.json                              	linguist-generated
+/test/fixtures/workflow.yml                	linguist-generated
 /tsconfig.eslint.json                      	linguist-generated
 /tsconfig.jest.json                        	linguist-generated
 /tsconfig.json                             	linguist-generated

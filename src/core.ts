@@ -82,6 +82,9 @@ export class GithubClient {
     this.repo = options.repo;
   }
 
+  /**
+   * @see https://docs.github.com/en/rest/reference/repos#get-the-latest-release
+   */
   async getLatestRelease(): Promise<GithubRelease> {
     const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/releases/latest`);
     core.info(`getLatestRelease: (${response.status}) ${response.data?.name}`);
@@ -89,6 +92,9 @@ export class GithubClient {
     return response.data;
   }
 
+  /**
+   * @see https://docs.github.com/en/rest/reference/repos#list-pull-requests-associated-with-a-commit
+   */
   async getPullRequestsFromCommit(commitSha: string): Promise<GithubPullRequest[]> {
     const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/commits/${commitSha}/pulls`, {
       // specify a media type because this feature is in preview
@@ -101,6 +107,19 @@ export class GithubClient {
     return response.data;
   }
 
+  /**
+   * @see https://docs.github.com/en/rest/reference/pulls#check-if-a-pull-request-has-been-merged
+   */
+  async isPullRequestMerged(pullNumber: number): Promise<boolean> {
+    const response = await this.octokit.request(`GET /repose/${this.owner}/${this.repo}/pulls/${pullNumber}/merge`);
+    core.info(`isPullRequestMerged on pull #${pullNumber}: (${response.status})`);
+
+    return response.status === 204;
+  }
+
+  /**
+   * @see https://docs.github.com/en/rest/reference/issues#get-an-issue
+   */
   async getIssue(issueNumber: number): Promise<GithubIssue> {
     const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/issues/${issueNumber}`);
     core.info(`getIssue on issue #${issueNumber}: (${response.status}) #${response.data?.number}`);
@@ -108,6 +127,9 @@ export class GithubClient {
     return response.data;
   }
 
+  /**
+   * @see https://docs.github.com/en/rest/reference/issues#list-issue-comments
+   */
   async listIssueComments(issueNumber: number): Promise<GithubIssueComment[]> {
     const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/issues/${issueNumber}/comments`);
     core.info(`listIssueComments on issue #${issueNumber}: (${response.status}) ${response.data.length} comments found`);
@@ -115,11 +137,14 @@ export class GithubClient {
     return response.data;
   }
 
-  async addComment(issueNumber: number, body: string): Promise<void> {
+  /**
+   * @see https://docs.github.com/en/rest/reference/issues#create-an-issue-comment
+   */
+  async createComment(issueNumber: number, body: string): Promise<void> {
     const response = await this.octokit.request(`POST /repos/${this.owner}/${this.repo}/issues/${issueNumber}/comments`, {
       body: body,
     });
-    core.info(`addComment on issue #${issueNumber}: (${response.status})`);
+    core.info(`createComment on issue #${issueNumber}: (${response.status})`);
   }
 }
 
@@ -173,10 +198,21 @@ export async function getPullRequests(gitClient: GitClient, githubClient: Github
   core.info(`pullRequests: [${pullRequests.map(pr => pr.url).join(',')}]`);
   core.info(`pullRequests errors: ${JSON.stringify(failures)}`);
 
-  // TODO: validate that the pull requests were actually merged?
-  // https://docs.github.com/en/rest/reference/pulls#check-if-a-pull-request-has-been-merged
+  // skip pull requests that aren't merged
+  // (e.g. if one pull request is linked to close another)
+  const mergedPromises = pullRequests.map((pr) => githubClient.isPullRequestMerged(pr.number));
+  const mergedResults = await Promise.allSettled(mergedPromises);
+  const mergedPullRequests = [];
+  for (const [index, mergedResult] of mergedResults.entries()) {
+    if (mergedResult.status === 'fulfilled' && mergedResult.value === true) {
+      mergedPullRequests.push(pullRequests[index]);
+    } else {
+      const prNumber = pullRequests[index].number;
+      core.info(`pull request #${prNumber} ignored because it was not merged`);
+    }
+  }
 
-  return pullRequests;
+  return mergedPullRequests;
 }
 
 /**
@@ -216,13 +252,13 @@ export async function hasAlreadyCommentedOn(githubClient: GithubClient, issueNum
 
   for (const comment of comments) {
     if (isCommentCreatedByAction(comment)) {
-      core.info(`comment (${comment.html_url}) was created by an action`);
-      return false;
+      core.info(`a comment (${comment.html_url}) was created by an action`);
+      return true;
     }
   }
   core.info('no comments created by actions found');
 
-  return true;
+  return false;
 }
 
 export function isCommentCreatedByAction(comment: GithubIssueComment): boolean {
@@ -248,14 +284,14 @@ export async function commentOn(options: CommentOnOptions): Promise<number> {
   const prMessage = PR_COMMENT_TEMPLATE(release.name, release.html_url);
   let skipCommenting = await hasAlreadyCommentedOn(githubClient, pullRequest.number);
   if (!skipCommenting) {
-    promises.push(githubClient.addComment(pullRequest.number, prMessage));
+    promises.push(githubClient.createComment(pullRequest.number, prMessage));
   }
 
   for (const issue of issues) {
     const issueMessage = ISSUE_COMMENT_TEMPLATE(pullRequest.number, release.name, release.html_url);
     skipCommenting = await hasAlreadyCommentedOn(githubClient, issue.number);
     if (!skipCommenting) {
-      promises.push(githubClient.addComment(issue.number, issueMessage));
+      promises.push(githubClient.createComment(issue.number, issueMessage));
     }
   }
 

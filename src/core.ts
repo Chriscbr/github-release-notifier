@@ -111,7 +111,7 @@ export class GithubClient {
    * @see https://docs.github.com/en/rest/reference/pulls#check-if-a-pull-request-has-been-merged
    */
   async isPullRequestMerged(pullNumber: number): Promise<boolean> {
-    const response = await this.octokit.request(`GET /repose/${this.owner}/${this.repo}/pulls/${pullNumber}/merge`);
+    const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/pulls/${pullNumber}/merge`);
     core.info(`isPullRequestMerged on pull #${pullNumber}: (${response.status})`);
 
     return response.status === 204;
@@ -239,8 +239,13 @@ export async function getLinkedIssues(githubClient: GithubClient, pullRequest: G
   core.info(`issue numbers found: [${issueNumbers.map((num) => '#' + num).join(',')}]`);
 
   const { successes } = await resolveAndReturn(issueNumbers.map((issueNum) => githubClient.getIssue(issueNum)));
-  const issues: GithubIssue[] = successes;
+  let issues: GithubIssue[] = successes;
   core.info(`validated issues: [${issues.map(issue => '#' + issue.number).join(',')}]`);
+
+  // filter out pull requests
+  // (in the GitHub API, all pull requests are issues, but not all issues are pull requests)
+  issues = issues.filter((issue) => (!issue.pull_request));
+  core.info(`validated issues (PRs filtered out): [${issues.map(issue => '#' + issue.number).join(',')}]`);
 
   return issues;
 }
@@ -252,7 +257,7 @@ export async function hasAlreadyCommentedOn(githubClient: GithubClient, issueNum
 
   for (const comment of comments) {
     if (isCommentCreatedByAction(comment)) {
-      core.info(`a comment (${comment.html_url}) was created by an action`);
+      core.info(`comment ${comment.html_url} was created by an action`);
       return true;
     }
   }

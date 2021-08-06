@@ -3,7 +3,7 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { ISSUE_COMMENT_TEMPLATE, LINKED_ISSUE_REGEXES, PR_COMMENT_TEMPLATE } from './constants';
 import { GithubIssue, GithubIssueComment, GithubPullRequest, GithubRelease } from './types';
-import { dedupArray, resolveAndReturnSuccesses } from './util';
+import { dedupArray, resolveAndReturn } from './util';
 
 export enum ActionMode {
   /**
@@ -95,7 +95,7 @@ export class GithubClient {
         previews: ['groot'],
       },
     });
-    core.debug(`getPullRequestsFromCommit on commitSha ${commitSha}: (${response.status}) ${response.data?.map((pr: GithubPullRequest) => pr.url).join('\n')}`);
+    core.debug(`getPullRequestsFromCommit on commitSha ${commitSha}: (${response.status}) ${response.data?.map((pr: GithubPullRequest) => pr.url).join(',')}`);
 
     return response.data;
   }
@@ -163,15 +163,17 @@ export async function getPullRequests(gitClient: GitClient, githubClient: Github
   core.debug(`previousTag: ${previousTag}`);
 
   const commits = gitClient.getCommitsBetweenTags(previousTag, tag);
-  core.debug(`commits: ${commits}`);
+  core.debug(`commits: [${commits.join(',')}]`);
 
   const promises = commits.map((commitSha) => githubClient.getPullRequestsFromCommit(commitSha));
-  const pullRequests: GithubPullRequest[] = (await resolveAndReturnSuccesses(promises)).flat();
-
-  // TODO: validate that the pull request was actually merged?
-  // https://docs.github.com/en/rest/reference/pulls#check-if-a-pull-request-has-been-merged
+  const { successes, failures } = await resolveAndReturn(promises);
+  const pullRequests: GithubPullRequest[] = successes.flat();
 
   core.debug(`pullRequests: ${pullRequests.map(pr => pr.url)}`);
+  core.debug(`pullRequests errors: ${failures.map(failure => JSON.stringify(failure))}`);
+
+  // TODO: validate that the pull requests were actually merged?
+  // https://docs.github.com/en/rest/reference/pulls#check-if-a-pull-request-has-been-merged
 
   return pullRequests;
 }
@@ -199,8 +201,9 @@ export async function getLinkedIssues(githubClient: GithubClient, pullRequest: G
   const issueNumbers: number[] = dedupArray(parseIssueNumbers(prBody));
   core.debug(`issue numbers found: [${issueNumbers.map((num) => '#' + num).join(',')}]`);
 
-  const issues: GithubIssue[] = await resolveAndReturnSuccesses(issueNumbers.map((issueNum) => githubClient.getIssue(issueNum)));
-  core.debug(`issues: ${issues.map(issue => issue.url).join('\n')}`);
+  const { successes } = await resolveAndReturn(issueNumbers.map((issueNum) => githubClient.getIssue(issueNum)));
+  const issues: GithubIssue[] = successes;
+  core.debug(`issues: ${issues.map(issue => issue.url).join(',')}`);
 
   return issues;
 }
@@ -210,7 +213,7 @@ export async function hasAlreadyCommentedOn(githubClient: GithubClient, actor: s
 
   const comments = await githubClient.listIssueComments(issueNumber);
   const commenters = comments.map((comment) => comment.user.login);
-  core.debug(`found commenters: ${commenters}`);
+  core.debug(`commenters found: [${commenters}]`);
 
   const hasAlreadyCommented = commenters.includes(actor);
   core.debug(`has ${actor} already commented? ${hasAlreadyCommented}`);
@@ -236,14 +239,14 @@ export async function commentOn(options: CommentOnOptions): Promise<number> {
   // work can be done in parallel - but for now this works. Some care is
   // needed to parallelize this without making the logs harder to read.
 
-  const prMessage = PR_COMMENT_TEMPLATE(repo, release.name);
+  const prMessage = PR_COMMENT_TEMPLATE(repo, release.name, release.url);
   let skipCommenting = await hasAlreadyCommentedOn(githubClient, actor, pullRequest.number);
   if (!skipCommenting) {
     promises.push(githubClient.addComment(pullRequest.number, prMessage));
   }
 
   for (const issue of issues) {
-    const issueMessage = ISSUE_COMMENT_TEMPLATE(pullRequest.number, repo, release.name);
+    const issueMessage = ISSUE_COMMENT_TEMPLATE(pullRequest.number, repo, release.name, release.url);
     skipCommenting = await hasAlreadyCommentedOn(githubClient, actor, issue.number);
     if (!skipCommenting) {
       promises.push(githubClient.addComment(issue.number, issueMessage));

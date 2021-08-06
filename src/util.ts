@@ -2,13 +2,16 @@ export function dedupArray<T>(arr: T[]): T[] {
   return arr.filter((value, index) => arr.indexOf(value) === index);
 }
 
-export async function resolveAndReturnSuccesses<T>(promises: Promise<T>[]): Promise<T[]> {
+export async function resolveAndReturn<T>(promises: Promise<T>[]): Promise<{ successes: T[]; failures: PromiseRejectedResult[] }> {
   const promiseResults = await Promise.allSettled(promises);
-  const output = [];
+  const successes = [];
+  const failures = [];
   for (const result of promiseResults) {
     if (result.status === 'fulfilled') {
-      output.push(result.value);
+      successes.push(result.value);
+    } else {
+      failures.push(result);
     }
   }
-  return output;
+  return { successes, failures };
 }

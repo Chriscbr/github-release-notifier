@@ -43,14 +43,14 @@ export interface ActionOptions {
 }
 
 function getContext() {
-  core.debug(`owner: ${github.context.repo.owner}`);
-  core.debug(`repo: ${github.context.repo.repo}`);
+  core.info(`owner: ${github.context.repo.owner}`);
+  core.info(`repo: ${github.context.repo.repo}`);
   return github.context.repo;
 }
 
 function getOptions(): ActionOptions {
-  core.debug(`mode: ${core.getInput('mode')}`);
-  core.debug(`maximum-comments: ${core.getInput('maximum-comments')}`);
+  core.info(`mode: ${core.getInput('mode')}`);
+  core.info(`maximum-comments: ${core.getInput('maximum-comments')}`);
 
   const mode: ActionMode | undefined = (<any>ActionMode)[core.getInput('mode')];
   const maximumComments: number = parseInt(core.getInput('maximum-comments'), 10); // may be NaN
@@ -59,7 +59,7 @@ function getOptions(): ActionOptions {
     maximumComments: maximumComments || 50,
   };
 
-  core.debug(`options: ${JSON.stringify(options)}`);
+  core.info(`options: ${JSON.stringify(options)}`);
 
   return options;
 }
@@ -84,7 +84,7 @@ export class GithubClient {
 
   async getLatestRelease(): Promise<GithubRelease> {
     const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/releases/latest`);
-    core.debug(`getLatestRelease: (${response.status}) ${response.data?.name}`);
+    core.info(`getLatestRelease: (${response.status}) ${response.data?.name}`);
 
     return response.data;
   }
@@ -96,21 +96,21 @@ export class GithubClient {
         previews: ['groot'],
       },
     });
-    core.debug(`getPullRequestsFromCommit on commitSha ${commitSha}: (${response.status}) ${response.data?.map((pr: GithubPullRequest) => pr.url).join(',')}`);
+    core.info(`getPullRequestsFromCommit on commitSha ${commitSha}: (${response.status}) ${response.data.length} pull requests found`);
 
     return response.data;
   }
 
   async getIssue(issueNumber: number): Promise<GithubIssue> {
     const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/issues/${issueNumber}`);
-    core.debug(`getIssue on issue #${issueNumber}: (${response.status}) #${response.data?.number}`);
+    core.info(`getIssue on issue #${issueNumber}: (${response.status}) #${response.data?.number}`);
 
     return response.data;
   }
 
   async listIssueComments(issueNumber: number): Promise<GithubIssueComment[]> {
     const response = await this.octokit.request(`GET /repos/${this.owner}/${this.repo}/issues/${issueNumber}/comments`);
-    core.debug(`listIssueComments on issue #${issueNumber}: (${response.status}) ${response.data.length} comments found`);
+    core.info(`listIssueComments on issue #${issueNumber}: (${response.status}) ${response.data.length} comments found`);
 
     return response.data;
   }
@@ -119,7 +119,7 @@ export class GithubClient {
     const response = await this.octokit.request(`POST /repos/${this.owner}/${this.repo}/issues/${issueNumber}/comments`, {
       body: body,
     });
-    core.debug(`addComment on issue #${issueNumber}: (${response.status})`);
+    core.info(`addComment on issue #${issueNumber}: (${response.status})`);
   }
 }
 
@@ -155,23 +155,23 @@ export class GitClient {
 }
 
 export async function getPullRequests(gitClient: GitClient, githubClient: GithubClient, release: GithubRelease): Promise<GithubPullRequest[]> {
-  core.debug(`getting pull requests for release: ${release.name}`);
+  core.info(`getting pull requests for release: ${release.name}`);
 
   const tag = release.tag_name;
-  core.debug(`tag: ${tag}`);
+  core.info(`tag: ${tag}`);
 
   const previousTag = gitClient.getPreviousTag(tag);
-  core.debug(`previousTag: ${previousTag}`);
+  core.info(`previousTag: ${previousTag}`);
 
   const commits = gitClient.getCommitsBetweenTags(previousTag, tag);
-  core.debug(`commits: [${commits.join(',')}]`);
+  core.info(`commits: [${commits.join(',')}]`);
 
   const promises = commits.map((commitSha) => githubClient.getPullRequestsFromCommit(commitSha));
   const { successes, failures } = await resolveAndReturn(promises);
   const pullRequests: GithubPullRequest[] = successes.flat();
 
-  core.debug(`pullRequests: ${pullRequests.map(pr => pr.url)}`);
-  core.debug(`pullRequests errors: ${failures.map(failure => JSON.stringify(failure))}`);
+  core.info(`pullRequests: [${pullRequests.map(pr => pr.url).join(',')}]`);
+  core.info(`pullRequests errors: ${JSON.stringify(failures)}`);
 
   // TODO: validate that the pull requests were actually merged?
   // https://docs.github.com/en/rest/reference/pulls#check-if-a-pull-request-has-been-merged
@@ -196,31 +196,31 @@ export function parseIssueNumbers(description: string): number[] {
 }
 
 export async function getLinkedIssues(githubClient: GithubClient, pullRequest: GithubPullRequest): Promise<GithubIssue[]> {
-  core.debug(`getting linked issues for pull request: #${pullRequest.number}`);
+  core.info(`getting linked issues for pull request: #${pullRequest.number}`);
 
   const prBody = pullRequest.body.toLowerCase();
   const issueNumbers: number[] = dedupArray(parseIssueNumbers(prBody));
-  core.debug(`issue numbers found: [${issueNumbers.map((num) => '#' + num).join(',')}]`);
+  core.info(`issue numbers found: [${issueNumbers.map((num) => '#' + num).join(',')}]`);
 
   const { successes } = await resolveAndReturn(issueNumbers.map((issueNum) => githubClient.getIssue(issueNum)));
   const issues: GithubIssue[] = successes;
-  core.debug(`valid issue urls: ${issues.map(issue => issue.url).join(',')}`);
+  core.info(`validated issues: [${issues.map(issue => '#' + issue.number).join(',')}]`);
 
   return issues;
 }
 
 export async function hasAlreadyCommentedOn(githubClient: GithubClient, issueNumber: number): Promise<boolean> {
-  core.debug(`checking if github action has already commented on issue #${issueNumber}`);
+  core.info(`checking if github action has already commented on issue #${issueNumber}`);
 
   const comments = await githubClient.listIssueComments(issueNumber);
 
   for (const comment of comments) {
     if (isCommentCreatedByAction(comment)) {
-      core.debug(`comment (${comment.html_url}) was created by an action`);
+      core.info(`comment (${comment.html_url}) was created by an action`);
       return false;
     }
   }
-  core.debug('no comments created by actions found');
+  core.info('no comments created by actions found');
 
   return true;
 }

@@ -73,6 +73,7 @@ project.release.addJobs({
       contents: JobPermission.READ,
       issues: JobPermission.WRITE,
       pullRequests: JobPermission.WRITE,
+      metadata: JobPermission.READ,
     },
     runsOn: 'ubuntu-latest',
     steps: [
@@ -111,6 +112,7 @@ new YamlFile(project, 'test/fixtures/workflow.yml', {
           'contents': JobPermission.READ,
           'issues': JobPermission.WRITE,
           'pull-requests': JobPermission.WRITE,
+          'metadata': JobPermission.READ,
         },
         'steps': [
           {

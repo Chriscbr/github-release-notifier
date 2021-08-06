@@ -42,3 +42,16 @@ jobs:
         with:
           name: dist
           path: dist
+  release_notifier:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - uses: ./
+        with:
+          mode: latest

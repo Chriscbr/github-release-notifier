@@ -75,7 +75,7 @@ devTest.exec('act release -s GITHUB_TOKEN=$GITHUB_TOKEN');
 // post-release workflow
 const postRelease = project.github.addWorkflow('post-release');
 postRelease.on({
-  release: {},
+  release: { types: ['created'] },
   workflowDispatch: {},
 });
 postRelease.addJobs({
@@ -88,6 +88,9 @@ postRelease.addJobs({
     steps: [
       {
         uses: 'actions/checkout@v2',
+        with: {
+          'fetch-depth': 0,
+        },
       },
       {
         uses: './',

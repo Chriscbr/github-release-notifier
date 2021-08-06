@@ -78,6 +78,7 @@ project.release.addJobs({
     permissions: {
       contents: JobPermission.READ,
       issues: JobPermission.WRITE,
+      pullRequests: JobPermission.READ,
     },
     runsOn: 'ubuntu-latest',
     steps: [
